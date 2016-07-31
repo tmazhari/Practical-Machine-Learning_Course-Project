@@ -1,0 +1,172 @@
+Practical Machine Learning Course Project
+=====================================================================
+##  Predicting How Well Participants Performed Barbell Lifts Exercise
+
+**Author:** Tahmoores Mazhari  
+**Date:** 30 July 2016
+
+## Executive Summary
+
+The quality of executing an activity, the "how (well)", has received little attention so far. In this project we are focusing on predicting the manner in which participants of this dataset did the exercise. Participants were Six 20-28 year old male with little weight lifting experience. They were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A) and four other classes corresponding to common mistakes: Classes B, C, D and E. You may find more information about this dataset at [here](http://groupware.les.inf.puc-rio.br/har#ixzz4FvKVmZ9n)
+
+## Getting Data
+
+At frist we load necessary packages for this project.
+
+```{r}
+library(caret)
+library(rattle)
+```
+
+Then we get the training and test datasets and store them in **orig_training** and **orig_testing** data frames.   
+
+```{r, cache=TRUE}
+sourcefile <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+destfile <- "training.csv"
+
+if(!file.exists(destfile)) {  
+  download.file(sourcefile, destfile=destfile) 
+}
+
+orig_training <-  read.csv("training.csv" ,sep = ",", na.strings = c("", "NA"))
+dim(orig_training)
+
+sourcefile <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+destfile <- "test.csv" 
+
+if(!file.exists(destfile)) {  
+  download.file(sourcefile, destfile=destfile) 
+}
+
+orig_testing <-  read.csv("test.csv" ,sep = ",", na.strings = c("", "NA"))
+dim(orig_testing)
+```
+
+## Cleaning Data
+
+By doing a little exploratory analysis we undertsand that we can disregard many variables for model creation. First we find the name of the columns that should be ignored, then drop them from the data frames.  
+
+- First 7 variables are irrelevant to outcome. So we can drop them. 
+
+```{r, cache=TRUE}
+# First 10 variables
+head(orig_training[,1:10])
+
+# Add first 7 variable names to be dropped
+drop_1 <- names(orig_training[,1:7])
+```
+
+- Then we find variables with more than half NAs.
+
+```{r, cache=TRUE}
+# Finding Vriables with more tha 50% NAs
+drop_2 <- names(orig_training[colMeans(is.na(orig_training)) > 0.5])
+```
+
+- Next we find variables that have no variabilty in them. 
+
+```{r, cache=TRUE}
+# Identifying zero covariates with nearZeroVar funnction
+nsv <- nearZeroVar(orig_training, saveMetrics=TRUE)
+drop_3 <- names(orig_training[nsv$nzv])
+```
+
+Now we combine all variables that should be dropped. As shown below there are 107 variables that can be ignored.
+
+```{r}
+# Merge all to-be dropped varaiable names 
+columnsToDrop <- c(drop_1, drop_2, drop_3) 
+
+# Remove repeated variables names
+columnsToDrop <- unique(columnsToDrop)
+str(columnsToDrop)
+```
+
+Here we omit unnecessary columns from **orig_training** and **orig_testing** data frames and take a look at remaining variables. 
+
+```{r}
+orig_training <- orig_training[ , !(names(orig_training) %in% columnsToDrop)]
+names(orig_training)
+
+orig_testing <- orig_testing[ , !(names(orig_testing) %in% columnsToDrop)]
+names(orig_testing)
+```
+
+## Data Splitting
+
+Since we want to get best results by applying our prediction model to the original testing dataset (**orig_testing**), so we need to split the original training dataset (**orig_training**) into *training* and *testing* datasets. We use *training* dataset to fit models and we use *testing* dataset as a benchmark to help us choose the most accurate model as our final prediction algorithm.
+
+```{r, cache=TRUE}
+set.seed(2357)
+inTrain <- createDataPartition(y=orig_training$classe, p=0.75, list=FALSE)
+training <- orig_training[inTrain,]
+testing <- orig_training[-inTrain,]
+
+dim(training)
+dim(testing)
+```
+
+## Fiting Model - Decision Tree
+
+At first we fit a model using Decision Trees and plot the finalModel. 
+
+```{r, cache=TRUE}
+set.seed(2357)
+modFit1 <- train(classe ~ ., data=training, method="rpart")
+fancyRpartPlot(modFit1$finalModel)
+```
+
+## Fiting Model - Linear Discriminant Analysis
+
+Second, we fit another model using Linear Discriminate Analysis method.
+
+```{r, cache=TRUE}
+set.seed(2357)
+modFit2 <- train(classe ~ ., data=training, method="lda")
+```
+
+## Fiting Model - Random Forests
+
+Unfortunately because of computation complexity and lack of memory I was not able to fit a model using Random Forests which would have certainly produced better and more accurate results.   
+
+```{r, cache=TRUE}
+set.seed(2357)
+# modFit3 <- train(classe ~ ., data=training, method="rf", prox=FALSE)
+# modFit3$finalModel
+```
+
+## Predictions and Confusion Matrix
+
+### Decision Tree
+
+Here we are going to create our first predictions using *modFit1* which was created by Decision Tree method.
+
+```{r, cache=TRUE}
+predictions1 <- predict(modFit1, newdata=testing)
+confusionMatrix(predictions1, testing$classe)
+```
+
+### Linear Discriminant Analysis
+
+Here we create our second predictions using *modFit2* which was created by Linear Discriminant Analysis method.
+
+```{r, cache=TRUE}
+predictions2 <- predict(modFit2, newdata=testing)
+confusionMatrix(predictions2, testing$classe)
+```
+
+## Conclusion
+
+By comparing the two models from previous section, we understand that Linear Discriminant Analysis has better accuracy:
+- **Decision Tree** with accuracy 49%.
+- **Linear Discriminant Analysis** with accuracy 70%.
+
+However this accuracy is not quite good enough. Knowing that Linear Discriminant Analysis has not yielded satisfying results, we pick this option for prediction on **orig_testing** dataset.
+
+## Predicting Quality of Exercises in Original Testing Dataset 
+
+```{r}
+predictionsQuiz <- predict(modFit2, newdata=orig_testing)
+predictionsQuiz
+```
+
